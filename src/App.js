@@ -10,7 +10,6 @@ import DonorManagement from './components/donors/DonorManagement';
 import Inventory from './components/inventory/Inventory';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import './App.css';
-
 const PrivateRoute = ({ children }) => {
   const { user, loading } = useAuth();
   
