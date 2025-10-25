@@ -8,6 +8,7 @@ import Dashboard from './components/dashboard/Dashboard';
 import UserManagement from './components/users/UserManagement';
 import DonorManagement from './components/donors/DonorManagement';
 import Inventory from './components/inventory/Inventory';
+import ABOTesting from './components/abo/ABOTesting';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import './App.css';
 const PrivateRoute = ({ children }) => {
@@ -81,6 +82,14 @@ function App() {
                 </PrivateRoute>
               } 
             />
+            <Route 
+                path="/abo-testing" 
+                element={
+                  <PrivateRoute allowedRoles={['abo_laboratory', 'general_manager', 'data_manager']}>
+                    <ABOTesting />
+                  </PrivateRoute>
+                } 
+              />
           </Routes>
         </div>
       </Router>

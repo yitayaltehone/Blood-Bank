@@ -70,5 +70,19 @@ export const inventoryAPI = {
   // }
 };
 
+export const testingAPI = {
+  // Get units for testing
+  getUnitsAwaitingTesting: () => api.get('/testing/units/awaiting'),
+  getUnitsInTesting: () => api.get('/testing/units/in-progress'),
+  getTestedUnits: () => api.get('/testing/units/completed'),
+  
+  // Test management
+  startTest: (unitId) => api.post(`/testing/start-test/${unitId}`),
+  recordResult: (unitId, resultData) => api.post(`/testing/record-result/${unitId}`, resultData),
+  
+  // Stats and details
+  getTestingStats: () => api.get('/testing/stats'),
+  getUnitDetails: (unitId) => api.get(`/testing/unit/${unitId}`)
+};
 
 export default api;

@@ -51,6 +51,13 @@ const Navigation = () => {
                   </>
                 )}
                 
+                {/* Add ABO Testing Link for authorized roles */}
+                {(user.role === 'abo_laboratory' || user.role === 'general_manager' || user.role === 'data_manager') && (
+                  <Nav.Link as={Link} to="/abo-testing">
+                    ABO Testing
+                  </Nav.Link>
+                )}
+                
                 <Nav.Link as={Link} to="/inventory">
                   Inventory
                 </Nav.Link>
