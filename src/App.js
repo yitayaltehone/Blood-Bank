@@ -12,6 +12,7 @@ import ABOTesting from './components/abo/ABOTesting';
 import InfectiousTesting from './components/infectious/InfectiousTesting';
 import Distribution from './components/distribution/Distribution';
 import BloodRequests from './components/requests/BloodRequests';
+import DonorProfile from './components/profile/DonorProfile';
 
 import 'bootstrap/dist/css/bootstrap.min.css';
 import './App.css';
@@ -92,6 +93,14 @@ function App() {
               element={
                 <PrivateRoute>
                   <DonorManagement />
+                </PrivateRoute>
+              } 
+            />
+            <Route 
+              path="/donor-profile" 
+              element={
+                <PrivateRoute>
+                  <DonorProfile />
                 </PrivateRoute>
               } 
             />
