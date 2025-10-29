@@ -136,6 +136,7 @@ const Register = () => {
                         <option value="infectious_laboratory">Infectious Laboratory</option>
                         <option value="blood_distributer">Blood Distributer</option>
                         <option value="council">Council</option>
+                        <option value="general_manager">general_manager</option>
                       </Form.Select>
                     </Form.Group>
                   </Col>

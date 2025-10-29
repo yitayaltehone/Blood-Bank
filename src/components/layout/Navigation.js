@@ -58,9 +58,29 @@ const Navigation = () => {
                   </Nav.Link>
                 )}
                 
+                {(user.role === 'infectious_laboratory' || user.role === 'general_manager' || user.role === 'data_manager') && (
+                  <Nav.Link as={Link} to="/infectious-testing">
+                    Infectious Testing
+                  </Nav.Link>
+                )}
+                
+                {/* FIXED: Distribution Link - Remove the object syntax and use proper Nav.Link */}
+                {(user.role === 'blood_distributer' || user.role === 'general_manager' || user.role === 'council') && (
+                  <Nav.Link as={Link} to="/distribution">
+                    Distribution
+                  </Nav.Link>
+                )}
+                
                 <Nav.Link as={Link} to="/inventory">
                   Inventory
                 </Nav.Link>
+
+                {/* Add Blood Requests Link for authorized roles */}
+                {(user.role === 'general_manager' || user.role === 'council' || user.role === 'blood_distributer') && (
+                  <Nav.Link as={Link} to="/requests">
+                    Blood Requests
+                  </Nav.Link>
+                )}
               </Nav>
               
               <Nav>

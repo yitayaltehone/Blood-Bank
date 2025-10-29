@@ -84,5 +84,43 @@ export const testingAPI = {
   getTestingStats: () => api.get('/testing/stats'),
   getUnitDetails: (unitId) => api.get(`/testing/unit/${unitId}`)
 };
+// Infectious Testing API
+export const infectiousAPI = {
+  // Get units for testing
+  getUnitsAwaitingTesting: () => api.get('/infectious/units/awaiting'),
+  getUnitsInTesting: () => api.get('/infectious/units/in-progress'),
+  getTestedUnits: () => api.get('/infectious/units/completed'),
+  getRequiredTests: () => api.get('/infectious/tests/required'),
+  
+  // Test management
+  startTest: (unitId) => api.post(`/infectious/start-test/${unitId}`),
+  recordResult: (unitId, resultData) => api.post(`/infectious/record-result/${unitId}`, resultData),
+};
+export const requestsAPI = {
+  getRequests: (params = '') => api.get(`/requests${params}`),
+  getRequestById: (id) => api.get(`/requests/${id}`),
+  createRequest: (data) => api.post('/requests', data),
+  updateRequest: (id, data) => api.put(`/requests/${id}`, data),
+  approveRequest: (id) => api.put(`/requests/${id}/approve`),
+  rejectRequest: (id) => api.put(`/requests/${id}/reject`),
+  getRequestStats: () => api.get('/requests/stats')
+};
+// src/services/api.js
+export const distributionService = {
+  // Get all distributions (replaces getDistributionHistory)
+  getDistributions: () => api.get('/distribution'),
+  
+  // Create new distribution (replaces distributeBlood)
+  createDistribution: (data) => api.post('/distribution', data),
+  
+  // Get specific distribution
+  getDistributionById: (id) => api.get(`/distribution/${id}`),
+  
+  // Get approved requests for distribution
+  getApprovedRequests: () => api.get('/distribution/requests/approved'),
+  
+  // Get distribution statistics
+  getDistributionStats: () => api.get('/distribution/stats'),
+};
 
 export default api;

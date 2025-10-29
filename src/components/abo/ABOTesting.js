@@ -18,6 +18,7 @@ const ABOTesting = () => {
   const [success, setSuccess] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [testNotes, setTestNotes] = useState('');
+  const [selectedResult, setSelectedResult] = useState('');
 
   const { user } = useAuth();
 
@@ -65,19 +66,31 @@ const ABOTesting = () => {
 
   const handleRecordResult = (unit) => {
     setSelectedUnit(unit);
+    setSelectedResult('');
     setTestNotes('');
     setShowResultModal(true);
   };
 
-  const handleSubmitResult = async (aboResult) => {
+  const handleSelectResult = (result) => {
+    setSelectedResult(result);
+  };
+
+  const handleSubmitResult = async () => {
+    if (!selectedResult) {
+      setError('Please select a test result before submitting.');
+      return;
+    }
+
     try {
       setLoading(true);
       await testingAPI.recordResult(selectedUnit.unit_id, {
-        abo_result: aboResult,
+        abo_result: selectedResult,
         notes: testNotes
       });
       setSuccess('Test result recorded successfully');
       setShowResultModal(false);
+      setSelectedResult('');
+      setTestNotes('');
       fetchTestingData();
     } catch (error) {
       setError(error.response?.data?.message || 'Failed to record result');
@@ -102,13 +115,32 @@ const ABOTesting = () => {
   const getABOResultBadge = (result) => {
     const resultConfig = {
       'pending': { variant: 'warning', text: 'Pending' },
-      'A': { variant: 'danger', text: 'A' },
-      'B': { variant: 'warning', text: 'B' },
-      'AB': { variant: 'info', text: 'AB' },
-      'O': { variant: 'success', text: 'O' },
+      'A+': { variant: 'danger', text: 'A+' },
+      'A-': { variant: 'outline-danger', text: 'A-' },
+      'B+': { variant: 'warning', text: 'B+' },
+      'B-': { variant: 'outline-warning', text: 'B-' },
+      'AB+': { variant: 'info', text: 'AB+' },
+      'AB-': { variant: 'outline-info', text: 'AB-' },
+      'O+': { variant: 'success', text: 'O+' },
+      'O-': { variant: 'outline-success', text: 'O-' },
       'inconclusive': { variant: 'dark', text: 'Inconclusive' }
     };
     const config = resultConfig[result] || { variant: 'secondary', text: result };
+    return <Badge bg={config.variant}>{config.text}</Badge>;
+  };
+
+  const getBloodTypeBadge = (bloodType) => {
+    const bloodTypeConfig = {
+      'A+': { variant: 'danger', text: 'A+' },
+      'A-': { variant: 'outline-danger', text: 'A-' },
+      'B+': { variant: 'warning', text: 'B+' },
+      'B-': { variant: 'outline-warning', text: 'B-' },
+      'AB+': { variant: 'info', text: 'AB+' },
+      'AB-': { variant: 'outline-info', text: 'AB-' },
+      'O+': { variant: 'success', text: 'O+' },
+      'O-': { variant: 'outline-success', text: 'O-' }
+    };
+    const config = bloodTypeConfig[bloodType] || { variant: 'secondary', text: bloodType };
     return <Badge bg={config.variant}>{config.text}</Badge>;
   };
 
@@ -120,6 +152,11 @@ const ABOTesting = () => {
       unit.last_name?.toLowerCase().includes(searchTerm.toLowerCase())
     );
   };
+
+  // Count rows for each tab
+  const awaitingCount = filterUnits(awaitingTesting).length;
+  const inProgressCount = filterUnits(inTesting).length;
+  const completedCount = filterUnits(completedTests).length;
 
   return (
     <Container fluid>
@@ -137,7 +174,7 @@ const ABOTesting = () => {
       {error && <Alert variant="danger" onClose={() => setError('')} dismissible>{error}</Alert>}
       {success && <Alert variant="success" onClose={() => setSuccess('')} dismissible>{success}</Alert>}
 
-      {/* Search */}
+      {/* Search and Stats */}
       <Row className="mb-4">
         <Col md={6}>
           <InputGroup>
@@ -156,6 +193,8 @@ const ABOTesting = () => {
                 Awaiting Testing: <strong>{awaitingTesting.length}</strong> | 
                 In Progress: <strong>{inTesting.length}</strong> |
                 Completed: <strong>{completedTests.length}</strong>
+                <br />
+                Showing: <strong>{awaitingCount + inProgressCount + completedCount}</strong> units
               </small>
             </Card.Body>
           </Card>
@@ -164,13 +203,21 @@ const ABOTesting = () => {
 
       {/* Tabs for different views */}
       <Tabs defaultActiveKey="awaiting" className="mb-4">
-        <Tab eventKey="awaiting" title="Awaiting Testing">
+        <Tab eventKey="awaiting" title={
+          <span>
+            Awaiting Testing 
+            {awaitingCount > 0 && <Badge bg="primary" className="ms-2">{awaitingCount}</Badge>}
+          </span>
+        }>
           <Card>
             <Card.Body>
-              <h5 className="card-title">Blood Units Ready for ABO Testing</h5>
+              <h5 className="card-title">
+                Blood Units Ready for ABO Testing 
+                <Badge bg="secondary" className="ms-2">{awaitingCount} units</Badge>
+              </h5>
               {loading ? (
                 <Alert variant="info">Loading units...</Alert>
-              ) : filterUnits(awaitingTesting).length === 0 ? (
+              ) : awaitingCount === 0 ? (
                 <Alert variant="info">
                   No units awaiting ABO testing. All units have been processed.
                 </Alert>
@@ -178,6 +225,7 @@ const ABOTesting = () => {
                 <Table striped bordered hover responsive>
                   <thead>
                     <tr>
+                      <th>#</th>
                       <th>Unit ID</th>
                       <th>Donor</th>
                       <th>Blood Type</th>
@@ -189,8 +237,11 @@ const ABOTesting = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {filterUnits(awaitingTesting).map((unit) => (
+                    {filterUnits(awaitingTesting).map((unit, index) => (
                       <tr key={unit.unit_id}>
+                        <td>
+                          <Badge bg="light" text="dark">{index + 1}</Badge>
+                        </td>
                         <td>
                           <Badge bg="primary">UNIT-{unit.unit_id}</Badge>
                         </td>
@@ -202,7 +253,7 @@ const ABOTesting = () => {
                           </div>
                         </td>
                         <td>
-                          <Badge bg="danger">{unit.blood_type}</Badge>
+                          {getBloodTypeBadge(unit.blood_type)}
                         </td>
                         <td>{new Date(unit.collection_date).toLocaleDateString()}</td>
                         <td>{new Date(unit.expiry_date).toLocaleDateString()}</td>
@@ -226,16 +277,25 @@ const ABOTesting = () => {
           </Card>
         </Tab>
 
-        <Tab eventKey="in-progress" title="In Progress">
+        <Tab eventKey="in-progress" title={
+          <span>
+            In Progress 
+            {inProgressCount > 0 && <Badge bg="warning" className="ms-2">{inProgressCount}</Badge>}
+          </span>
+        }>
           <Card>
             <Card.Body>
-              <h5 className="card-title">ABO Tests in Progress</h5>
-              {filterUnits(inTesting).length === 0 ? (
+              <h5 className="card-title">
+                ABO Tests in Progress
+                <Badge bg="secondary" className="ms-2">{inProgressCount} units</Badge>
+              </h5>
+              {inProgressCount === 0 ? (
                 <Alert variant="info">No tests currently in progress.</Alert>
               ) : (
                 <Table striped bordered hover responsive>
                   <thead>
                     <tr>
+                      <th>#</th>
                       <th>Unit ID</th>
                       <th>Donor</th>
                       <th>Blood Type</th>
@@ -246,8 +306,11 @@ const ABOTesting = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {filterUnits(inTesting).map((unit) => (
+                    {filterUnits(inTesting).map((unit, index) => (
                       <tr key={unit.unit_id}>
+                        <td>
+                          <Badge bg="light" text="dark">{index + 1}</Badge>
+                        </td>
                         <td>
                           <Badge bg="warning">UNIT-{unit.unit_id}</Badge>
                         </td>
@@ -259,7 +322,7 @@ const ABOTesting = () => {
                           </div>
                         </td>
                         <td>
-                          <Badge bg="danger">{unit.blood_type}</Badge>
+                          {getBloodTypeBadge(unit.blood_type)}
                         </td>
                         <td>{new Date(unit.collection_date).toLocaleDateString()}</td>
                         <td>
@@ -284,16 +347,25 @@ const ABOTesting = () => {
           </Card>
         </Tab>
 
-        <Tab eventKey="completed" title="Completed Tests">
+        <Tab eventKey="completed" title={
+          <span>
+            Completed Tests
+            {completedCount > 0 && <Badge bg="success" className="ms-2">{completedCount}</Badge>}
+          </span>
+        }>
           <Card>
             <Card.Body>
-              <h5 className="card-title">Completed ABO Tests</h5>
-              {filterUnits(completedTests).length === 0 ? (
+              <h5 className="card-title">
+                Completed ABO Tests
+                <Badge bg="secondary" className="ms-2">{completedCount} units</Badge>
+              </h5>
+              {completedCount === 0 ? (
                 <Alert variant="info">No completed tests found.</Alert>
               ) : (
                 <Table striped bordered hover responsive>
                   <thead>
                     <tr>
+                      <th>#</th>
                       <th>Unit ID</th>
                       <th>Donor</th>
                       <th>Blood Type</th>
@@ -304,8 +376,11 @@ const ABOTesting = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {filterUnits(completedTests).map((unit) => (
+                    {filterUnits(completedTests).map((unit, index) => (
                       <tr key={unit.unit_id}>
+                        <td>
+                          <Badge bg="light" text="dark">{index + 1}</Badge>
+                        </td>
                         <td>
                           <Badge bg="success">UNIT-{unit.unit_id}</Badge>
                         </td>
@@ -317,14 +392,14 @@ const ABOTesting = () => {
                           </div>
                         </td>
                         <td>
-                          <Badge bg="danger">{unit.blood_type}</Badge>
+                          {getBloodTypeBadge(unit.blood_type)}
                         </td>
                         <td>
                           {getABOResultBadge(unit.abo_test_result)}
                           {unit.donor_blood_type && (
                             <div>
                               <small className={
-                                unit.abo_test_result === unit.donor_blood_type.replace('+', '').replace('-', '') 
+                                unit.abo_test_result === unit.donor_blood_type 
                                   ? 'text-success' 
                                   : 'text-danger'
                               }>
@@ -360,7 +435,7 @@ const ABOTesting = () => {
               <p><strong>Unit ID:</strong> UNIT-{selectedUnit.unit_id}</p>
               <p><strong>Donor:</strong> {selectedUnit.first_name} {selectedUnit.last_name}</p>
               <p><strong>Donor ID:</strong> {selectedUnit.donor_number}</p>
-              <p><strong>Blood Type:</strong> {selectedUnit.blood_type}</p>
+              <p><strong>Blood Type:</strong> {getBloodTypeBadge(selectedUnit.blood_type)}</p>
               <p><strong>Collection Date:</strong> {new Date(selectedUnit.collection_date).toLocaleDateString()}</p>
               
               <Alert variant="info" className="mt-3">
@@ -391,36 +466,62 @@ const ABOTesting = () => {
               <h6>Unit Details:</h6>
               <p><strong>Unit ID:</strong> UNIT-{selectedUnit.unit_id}</p>
               <p><strong>Donor:</strong> {selectedUnit.first_name} {selectedUnit.last_name}</p>
-              <p><strong>Blood Type:</strong> {selectedUnit.blood_type}</p>
+              <p><strong>Blood Type:</strong> {getBloodTypeBadge(selectedUnit.blood_type)}</p>
               
               <hr />
               
               <h6>ABO Test Result:</h6>
-              <div className="mb-3">
-                <div className="d-flex gap-2 mb-3 flex-wrap">
-                  {['A', 'B', 'AB', 'O'].map(type => (
-                    <Button
-                      key={type}
-                      variant="outline-primary"
-                      size="lg"
-                      className="mb-2"
-                      style={{minWidth: '80px'}}
-                      onClick={() => handleSubmitResult(type)}
-                    >
-                      {type}
-                    </Button>
+              <Alert variant="info" className="mb-3">
+                Select the blood type determined by your laboratory test:
+              </Alert>
+              
+              <div className="mb-4">
+                <Row className="g-2">
+                  {['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'].map(type => (
+                    <Col key={type} xs={6} md={3}>
+                      <Button
+                        variant={selectedResult === type ? "primary" : "outline-primary"}
+                        className="w-100 py-2 mb-2"
+                        onClick={() => handleSelectResult(type)}
+                      >
+                        <div>
+                          <strong>{type}</strong>
+                          <br />
+                          <small>Blood Type</small>
+                        </div>
+                      </Button>
+                    </Col>
                   ))}
-                </div>
+                </Row>
                 
-                <div className="mb-3">
-                  <Button
-                    variant="outline-warning"
-                    onClick={() => handleSubmitResult('inconclusive')}
-                  >
-                    Inconclusive
-                  </Button>
-                </div>
+                <Row className="mt-2">
+                  <Col xs={12}>
+                    <Button
+                      variant={selectedResult === 'inconclusive' ? "warning" : "outline-warning"}
+                      className="w-100 py-2"
+                      onClick={() => handleSelectResult('inconclusive')}
+                    >
+                      🚫 Inconclusive Result
+                    </Button>
+                  </Col>
+                </Row>
               </div>
+
+              {selectedResult && (
+                <Alert variant={selectedResult === 'inconclusive' ? 'warning' : 'success'}>
+                  <strong>Selected Result:</strong> {getABOResultBadge(selectedResult)}
+                  {selectedResult !== 'inconclusive' && (
+                    <div>
+                      <small>This unit will be marked as <Badge bg="success">Approved</Badge></small>
+                    </div>
+                  )}
+                  {selectedResult === 'inconclusive' && (
+                    <div>
+                      <small>This unit will be moved to <Badge bg="dark">Quarantined</Badge> for further testing</small>
+                    </div>
+                  )}
+                </Alert>
+              )}
               
               <Form.Group>
                 <Form.Label>Test Notes (Optional)</Form.Label>
@@ -438,6 +539,13 @@ const ABOTesting = () => {
         <Modal.Footer>
           <Button variant="secondary" onClick={() => setShowResultModal(false)}>
             Cancel
+          </Button>
+          <Button 
+            variant={selectedResult === 'inconclusive' ? 'warning' : 'primary'} 
+            onClick={handleSubmitResult} 
+            disabled={loading || !selectedResult}
+          >
+            {loading ? 'Recording...' : 'Record Result'}
           </Button>
         </Modal.Footer>
       </Modal>
