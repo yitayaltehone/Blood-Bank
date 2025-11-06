@@ -122,5 +122,13 @@ export const distributionService = {
   // Get distribution statistics
   getDistributionStats: () => api.get('/distribution/stats'),
 };
+// Add to your existing api.js file
+export const reportsAPI = {
+  getSummary: (params) => api.get('/reports/summary', { params }),
+  getDetailed: (params) => api.get('/reports/detailed', { params }),
+  getYears: () => api.get('/reports/years'),
+  getAnalytics: () => api.get('/reports/analytics'),
+  test: () => api.get('/reports/test'),
+};
 
 export default api;

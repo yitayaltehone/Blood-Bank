@@ -208,9 +208,9 @@ const DonorProfile = () => {
                     </TableCell>
                     <TableCell>
                       <Chip 
-                        label={donor.sex || 'Not specified'} 
+                        label={donor.gender || 'Not specified'} 
                         size="small"
-                        color={donor.sex === 'Male' ? 'primary' : 'secondary'}
+                        color={donor.gender === 'Male' ? 'primary' : 'secondary'}
                       />
                     </TableCell>
                     <TableCell>{donor.age || 'N/A'}</TableCell>

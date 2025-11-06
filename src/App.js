@@ -13,7 +13,7 @@ import InfectiousTesting from './components/infectious/InfectiousTesting';
 import Distribution from './components/distribution/Distribution';
 import BloodRequests from './components/requests/BloodRequests';
 import DonorProfile from './components/profile/DonorProfile';
-
+import Reports from './components/reports/Reports';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import './App.css';
 const PrivateRoute = ({ children, allowedRoles = [] }) => {
@@ -80,6 +80,8 @@ function App() {
                 </PrivateRoute>
               } 
             />
+            <Route path="/reports" element={<Reports />} />
+
             <Route 
               path="/users" 
               element={

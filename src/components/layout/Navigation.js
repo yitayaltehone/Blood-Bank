@@ -55,6 +55,12 @@ const Navigation = () => {
                     Donor Profile
                   </Nav.Link>
                 )}
+                {/* Add Reports Link for authorized roles */}
+                {(user.role === 'general_manager' || user.role === 'council' || user.role === 'data_manager') && (
+                  <Nav.Link as={Link} to="/reports">
+                    Reports
+                  </Nav.Link>
+                )}
                 {/* Add ABO Testing Link for authorized roles */}
                 {(user.role === 'abo_laboratory' || user.role === 'general_manager' || user.role === 'data_manager') && (
                   <Nav.Link as={Link} to="/abo-testing">
