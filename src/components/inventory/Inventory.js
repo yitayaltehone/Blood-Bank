@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Container, Row, Col, Card, Alert, Badge, Button, Modal, Form, Spinner, InputGroup, ListGroup } from 'react-bootstrap';
-import { inventoryAPI, donorsAPI } from '../../services/api'; // Import both APIs
+import { Container, Row, Col, Card, Alert, Badge, Button, Modal, Form, Spinner, InputGroup, ListGroup, Table } from 'react-bootstrap';
+import { inventoryAPI, donorsAPI } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 
 const Inventory = () => {
@@ -9,22 +9,23 @@ const Inventory = () => {
   const [loading, setLoading] = useState(true);
   const [donorsLoading, setDonorsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [showDonorList, setShowDonorList] = useState(false);
   const [selectedDonor, setSelectedDonor] = useState(null);
+  const [useManualInput, setUseManualInput] = useState(false);
   const { user } = useAuth();
 
   // Form state
   const [formData, setFormData] = useState({
-    blood_type: '',
-    status: 'available',
-    units: 1,
-    total_ml: 450,
+    status: 'collected',
+    quantity_ml: 450,
     donor_id: '',
     collection_date: new Date().toISOString().split('T')[0],
-    expiration_date: '',
+    expiry_date: '',
+    storage_location: 'Main Storage',
     notes: ''
   });
 
@@ -36,56 +37,19 @@ const Inventory = () => {
     try {
       setLoading(true);
       setError('');
-      console.log('Fetching inventory data...');
       
       const response = await inventoryAPI.getInventory();
-      console.log('Inventory API response:', response);
       
-      if (response.data) {
-        setInventory(response.data);
-        console.log('Inventory data set:', response.data);
+      if (response.data.success) {
+        setInventory(response.data.data || []);
       } else {
-        throw new Error('No data received from server');
+        throw new Error(response.data.error || 'Failed to fetch inventory');
       }
+      
     } catch (error) {
       console.error('Error fetching inventory:', error);
-      console.error('Error response:', error.response);
-      
-      let errorMessage = 'Failed to fetch inventory data';
-      
-      if (error.response) {
-        // Server responded with error status
-        switch (error.response.status) {
-          case 401:
-            errorMessage += ': Unauthorized. Please log in again.';
-            break;
-          case 403:
-            errorMessage += ': Access forbidden.';
-            break;
-          case 404:
-            errorMessage += ': Inventory endpoint not found.';
-            break;
-          case 500:
-            errorMessage += ': Server error. Please try again later.';
-            break;
-          default:
-            errorMessage += `: Server error (${error.response.status}).`;
-        }
-        
-        // Add server message if available
-        if (error.response.data && error.response.data.message) {
-          errorMessage += ` ${error.response.data.message}`;
-        }
-      } else if (error.request) {
-        // Request was made but no response received
-        errorMessage += ': No response from server. Please check your network connection.';
-      } else {
-        // Something else happened
-        errorMessage += `: ${error.message}`;
-      }
-      
-      setError(errorMessage);
-      setInventory([]); // Set empty array on error
+      setError('Failed to load inventory data. Please try again.');
+      setInventory([]);
     } finally {
       setLoading(false);
     }
@@ -94,19 +58,94 @@ const Inventory = () => {
   const fetchDonors = async () => {
     try {
       setDonorsLoading(true);
-      setError('');
-      const response = await donorsAPI.getDonors(); // Use donorsAPI instead of inventoryAPI
+      console.log('🔄 Starting donor fetch...');
       
-      // Handle different response structures
-      const donorsData = response.data || response.data?.donors || response.data?.data || [];
+      // Test if donor API is available
+      try {
+        const testResponse = await fetch('http://localhost:5000/api/donors/test-simple');
+        console.log('🔧 Test endpoint status:', testResponse.status);
+        if (!testResponse.ok) {
+          throw new Error(`Test endpoint failed: ${testResponse.status}`);
+        }
+        const testData = await testResponse.json();
+        console.log('✅ Test endpoint response:', testData);
+      } catch (testError) {
+        console.error('❌ Donor API test failed:', testError);
+        throw new Error('Donor API is not available. Check backend routes.');
+      }
+
+      // Try multiple endpoints
+      let response;
+      let donorsData = [];
+      
+      try {
+        console.log('🔍 Trying /donors/all endpoint...');
+        response = await donorsAPI.getAllDonors();
+        console.log('📦 /donors/all response:', response);
+        
+        if (response.data) {
+          if (response.data.success && Array.isArray(response.data.data)) {
+            donorsData = response.data.data;
+            console.log('✅ Using response.data.data');
+          } else if (Array.isArray(response.data)) {
+            donorsData = response.data;
+            console.log('✅ Using direct response.data array');
+          } else if (response.data.data && Array.isArray(response.data.data)) {
+            donorsData = response.data.data;
+            console.log('✅ Using response.data.data (no success flag)');
+          }
+        }
+      } catch (allError) {
+        console.log('❌ /donors/all failed, trying /donors...');
+        try {
+          response = await donorsAPI.getDonors();
+          console.log('📦 /donors response:', response);
+          
+          if (response.data && response.data.data && Array.isArray(response.data.data.donors)) {
+            donorsData = response.data.data.donors;
+            console.log('✅ Using response.data.data.donors');
+          }
+        } catch (donorsError) {
+          console.log('❌ /donors failed, trying debug endpoint...');
+          try {
+            response = await donorsAPI.debugDonors();
+            console.log('📦 Debug response:', response);
+            
+            if (response.data && Array.isArray(response.data.all_donors)) {
+              donorsData = response.data.all_donors;
+              console.log('✅ Using response.data.all_donors');
+            }
+          } catch (debugError) {
+            console.error('❌ All donor endpoints failed');
+            throw new Error('All donor API endpoints failed. Check backend.');
+          }
+        }
+      }
+
+      console.log(`🎯 Final donors data:`, donorsData);
+      console.log(`📈 Number of donors loaded: ${donorsData.length}`);
+      
+      if (donorsData.length > 0) {
+        console.log('🔍 Sample donor:', donorsData[0]);
+        console.log('🔍 Donor keys:', Object.keys(donorsData[0]));
+      }
+      
       setDonors(donorsData);
       
-      if (donorsData.length === 0) {
-        console.warn('No donors found in response');
-      }
     } catch (error) {
-      console.error('Failed to fetch donors:', error);
-      setError('Failed to load donor list. Please check if the donors API endpoint is available.');
+      console.error('❌ Failed to fetch donors:', error);
+      let errorMsg = 'Failed to load donor list. ';
+      
+      if (error.message.includes('Donor API is not available')) {
+        errorMsg += 'Backend donor routes are not registered. ';
+      } else if (error.response?.status === 404) {
+        errorMsg += 'Donor API endpoint not found (404). ';
+      } else if (error.response?.status === 500) {
+        errorMsg += 'Server error. Check backend logs. ';
+      }
+      
+      errorMsg += error.message;
+      setError(errorMsg);
       setDonors([]);
     } finally {
       setDonorsLoading(false);
@@ -114,161 +153,120 @@ const Inventory = () => {
   };
 
   const handleShowAddModal = async () => {
-    // Fetch donors when modal opens
     await fetchDonors();
     
-    // Calculate expiration date (42 days from collection)
-    const expirationDate = new Date();
-    expirationDate.setDate(expirationDate.getDate() + 42);
+    const expiryDate = new Date();
+    expiryDate.setDate(expiryDate.getDate() + 42);
     
     setFormData({
-      blood_type: '',
-      status: 'available',
-      units: 1,
-      total_ml: 450,
+      status: 'collected',
+      quantity_ml: 450,
       donor_id: '',
       collection_date: new Date().toISOString().split('T')[0],
-      expiration_date: expirationDate.toISOString().split('T')[0],
+      expiry_date: expiryDate.toISOString().split('T')[0],
+      storage_location: 'Main Storage',
       notes: ''
     });
     setSearchTerm('');
     setSelectedDonor(null);
     setShowDonorList(false);
+    setUseManualInput(false);
     setShowAddModal(true);
   };
 
   const handleCloseAddModal = () => {
     setShowAddModal(false);
     setFormData({
-      blood_type: '',
-      status: 'available',
-      units: 1,
-      total_ml: 450,
+      status: 'collected',
+      quantity_ml: 450,
       donor_id: '',
       collection_date: new Date().toISOString().split('T')[0],
-      expiration_date: '',
+      expiry_date: '',
+      storage_location: 'Main Storage',
       notes: ''
     });
     setSearchTerm('');
     setSelectedDonor(null);
     setShowDonorList(false);
+    setUseManualInput(false);
+    setError('');
+    setSuccess('');
   };
 
-  const handleSearchChange = (e) => {
+  const handleSearchChange = async (e) => {
     const value = e.target.value;
     setSearchTerm(value);
-    setShowDonorList(true);
     
-    // If search is cleared, reset selection
-    if (!value) {
-      setSelectedDonor(null);
-      setFormData(prev => ({
-        ...prev,
-        donor_id: '',
-        blood_type: ''
-      }));
+    // Fetch donors if we have a search term and no donors loaded yet
+    if (value && value.length >= 2 && donors.length === 0) {
+      await fetchDonors();
     }
+    
+    // Show dropdown if we have at least 2 characters
+    setShowDonorList(value.length >= 2);
   };
 
   const handleDonorSelect = (donor) => {
+    console.log('🎯 Selecting donor:', donor);
+    
     const donorId = donor.id || donor.donor_id || donor._id;
-    const bloodType = donor.blood_type || donor.bloodType || '';
+    if (!donorId) {
+      console.error('❌ No valid donor ID found:', donor);
+      setError('Invalid donor selected');
+      return;
+    }
     
     setSelectedDonor(donor);
     setSearchTerm(getDonorDisplayName(donor));
     setShowDonorList(false);
     
-    // Update form data
     setFormData(prev => ({
       ...prev,
-      donor_id: donorId,
-      blood_type: bloodType
+      donor_id: donorId.toString()
     }));
 
-    console.log(`Selected donor: ${getDonorDisplayName(donor)}`);
+    console.log('✅ Donor selected, formData.donor_id:', donorId);
   };
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-
     setFormData(prev => ({
       ...prev,
       [name]: value
     }));
-
-    // Auto-calculate total_ml when units change
-    if (name === 'units') {
-      const units = parseInt(value) || 1;
-      setFormData(prev => ({
-        ...prev,
-        units: units,
-        total_ml: units * 450
-      }));
-    }
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSubmitting(true);
     setError('');
+    setSuccess('');
 
     try {
-      // Validate required fields
-      if (!formData.blood_type) {
-        throw new Error('Blood type is required');
-      }
       if (!formData.donor_id) {
         throw new Error('Please select a donor');
       }
 
-      // Log the data being sent for debugging
-      console.log('Submitting inventory data:', formData);
-
-      const response = await inventoryAPI.addInventoryItem(formData);
-      console.log('API Response:', response);
+      console.log('📤 Submitting blood unit:', formData);
+      const response = await inventoryAPI.addBloodUnit(formData);
       
-      await fetchInventory(); // Refresh the inventory
-      handleCloseAddModal();
+      if (response.data.success) {
+        setSuccess('Blood unit added successfully!');
+        await fetchInventory();
+        setTimeout(() => {
+          handleCloseAddModal();
+        }, 1500);
+      } else {
+        throw new Error(response.data.error || 'Failed to add blood unit');
+      }
     } catch (error) {
-      console.error('API Error details:', error);
-      console.error('Error response:', error.response);
+      console.error('API Error:', error);
       
-      let errorMessage = 'Failed to add new inventory entry: ';
+      let errorMessage = 'Failed to add blood unit: ';
       
       if (error.response) {
-        // Server responded with error status
-        switch (error.response.status) {
-          case 405:
-            errorMessage += 'Method not allowed. Please check if the API endpoint supports POST requests.';
-            break;
-          case 404:
-            errorMessage += 'Endpoint not found. Please check the API URL.';
-            break;
-          case 500:
-            errorMessage += 'Server error. Please try again later.';
-            break;
-          case 400:
-            errorMessage += 'Bad request. Please check the data you entered.';
-            break;
-          case 401:
-            errorMessage += 'Unauthorized. Please check your authentication.';
-            break;
-          case 403:
-            errorMessage += 'Forbidden. You do not have permission to perform this action.';
-            break;
-          default:
-            errorMessage += `Server error (${error.response.status}).`;
-        }
-        
-        // Add server message if available
-        if (error.response.data && error.response.data.message) {
-          errorMessage += ` Server message: ${error.response.data.message}`;
-        }
-      } else if (error.request) {
-        // Request was made but no response received
-        errorMessage += 'No response from server. Please check your network connection.';
+        errorMessage += error.response.data?.error || error.response.data?.message || 'Server error';
       } else {
-        // Something else happened
         errorMessage += error.message;
       }
       
@@ -280,6 +278,7 @@ const Inventory = () => {
 
   const getStatusBadge = (status) => {
     const statusConfig = {
+      'collected': { variant: 'primary', text: 'Collected' },
       'available': { variant: 'success', text: 'Available' },
       'in_testing': { variant: 'warning', text: 'In Testing' },
       'approved': { variant: 'success', text: 'Approved' },
@@ -293,84 +292,103 @@ const Inventory = () => {
     return <Badge bg={config.variant}>{config.text}</Badge>;
   };
 
-  const getBloodTypeCard = (bloodType) => {
-    // Handle empty inventory state
-    if (!inventory || inventory.length === 0) {
-      return (
-        <Col key={bloodType} md={3} className="mb-3">
-          <Card className="text-white bg-secondary">
-            <Card.Body className="text-center">
-              <Card.Title>{bloodType}</Card.Title>
-              <Card.Text className="display-6">0</Card.Text>
-              <Card.Text>Units</Card.Text>
-              <small>0 ml</small>
-            </Card.Body>
-          </Card>
-        </Col>
-      );
-    }
+  const getABOBadge = (aboType) => {
+    const aboConfig = {
+      'A+': { variant: 'danger', text: 'A+' },
+      'A-': { variant: 'danger', text: 'A-' },
+      'B+': { variant: 'warning', text: 'B+' },
+      'B-': { variant: 'warning', text: 'B-' },
+      'AB+': { variant: 'info', text: 'AB+' },
+      'AB-': { variant: 'info', text: 'AB-' },
+      'O+': { variant: 'success', text: 'O+' },
+      'O-': { variant: 'success', text: 'O-' },
+      'pending': { variant: 'secondary', text: 'Pending' }
+    };
 
-    const bloodTypeData = inventory.filter(item => item.blood_type === bloodType);
-    const totalUnits = bloodTypeData.reduce((sum, item) => sum + (item.units || 0), 0);
-    const totalMl = bloodTypeData.reduce((sum, item) => sum + (item.total_ml || 0), 0);
+    const config = aboConfig[aboType] || { variant: 'secondary', text: aboType || 'Unknown' };
+    return <Badge bg={config.variant}>{config.text}</Badge>;
+  };
+
+  const getABOSummaryCard = (aboType) => {
+    const aboData = Array.isArray(inventory) ? inventory.filter(item => item.abo_test_result === aboType) : [];
+    const totalUnits = aboData.length;
+    const totalMl = aboData.reduce((sum, item) => sum + (Number(item.quantity_ml) || 0), 0);
+    const availableUnits = aboData.filter(item => 
+      item.status === 'available' || item.status === 'approved'
+    ).length;
     
     let alertClass = 'secondary';
-    if (totalUnits === 0) {
+    if (availableUnits === 0) {
       alertClass = 'danger';
-    } else if (totalUnits < 5) {
+    } else if (availableUnits < 3) {
       alertClass = 'warning';
     } else {
       alertClass = 'success';
     }
 
     return (
-      <Col key={bloodType} md={3} className="mb-3">
+      <Col key={aboType} md={3} className="mb-3">
         <Card className={`text-white bg-${alertClass}`}>
           <Card.Body className="text-center">
-            <Card.Title>{bloodType}</Card.Title>
-            <Card.Text className="display-6">{totalUnits}</Card.Text>
-            <Card.Text>Units</Card.Text>
-            <small>{totalMl} ml</small>
+            <Card.Title>{getABOBadge(aboType)}</Card.Title>
+            <Card.Text className="display-6">{availableUnits}</Card.Text>
+            <Card.Text>Available Units</Card.Text>
+            <small>Total: {totalUnits} units, {totalMl} ml</small>
           </Card.Body>
         </Card>
       </Col>
     );
   };
 
-  // Get donor display name based on available fields
   const getDonorDisplayName = (donor) => {
-    const donorId = donor.donor_id || donor.id || donor._id || 'N/A';
-    const name = donor.name || `${donor.first_name || ''} ${donor.last_name || ''}`.trim() || 'Unknown Donor';
-    const bloodType = donor.blood_type || donor.bloodType || 'Unknown';
+    if (!donor) return 'Unknown Donor';
     
-    return `${donorId} - ${name} (${bloodType})`;
+    const donorId = donor.donor_id || donor.id || 'N/A';
+    const firstName = donor.first_name || '';
+    const lastName = donor.last_name || '';
+    const name = `${firstName} ${lastName}`.trim() || 'Unknown Donor';
+    
+    return `${donorId} - ${name}`;
   };
 
-  // Filter active/eligible donors
-  const activeDonors = donors.filter(donor => {
-    const status = donor.status || donor.donor_status || donor.eligibility_status;
-    return !status || status === 'active' || status === 'eligible' || status === 'approved';
-  });
+  const getDonorFullName = (donor) => {
+    if (!donor) return '';
+    const firstName = donor.first_name || '';
+    const lastName = donor.last_name || '';
+    return `${firstName} ${lastName}`.trim();
+  };
 
-  // Filter donors based on search term
-  const filteredDonors = activeDonors.filter(donor => {
-    if (!searchTerm) return true;
+  const getDonorPhone = (donor) => {
+    return donor.contact_number || donor.phone || 'No phone';
+  };
+
+  const filteredDonors = Array.isArray(donors) ? donors.filter(donor => {
+    if (!searchTerm || searchTerm.length < 2) return false;
     
     const searchLower = searchTerm.toLowerCase();
-    const donorId = (donor.donor_id || donor.id || donor._id || '').toString().toLowerCase();
-    const name = (donor.name || `${donor.first_name || ''} ${donor.last_name || ''}`).toLowerCase();
-    const bloodType = (donor.blood_type || donor.bloodType || '').toLowerCase();
+    
+    // Search in full name, phone number, and donor ID
+    const fullName = getDonorFullName(donor).toLowerCase();
+    const phone = getDonorPhone(donor).toLowerCase();
+    const donorId = (donor.donor_id || donor.id || '').toString().toLowerCase();
     const email = (donor.email || '').toLowerCase();
-    const phone = (donor.phone || donor.phone_number || '').toLowerCase();
-
+    
     return (
+      fullName.includes(searchLower) ||
+      phone.includes(searchLower) ||
       donorId.includes(searchLower) ||
-      name.includes(searchLower) ||
-      bloodType.includes(searchLower) ||
-      email.includes(searchLower) ||
-      phone.includes(searchLower)
+      email.includes(searchLower)
     );
-  });
+  }) : [];
+
+  const formatDate = (dateString) => {
+    if (!dateString) return 'N/A';
+    try {
+      return new Date(dateString).toLocaleDateString();
+    } catch (error) {
+      return 'Invalid Date';
+    }
+  };
 
   if (loading) {
     return (
@@ -391,17 +409,18 @@ const Inventory = () => {
         </Col>
       </Row>
 
-      {error && <Alert variant="danger">{error}</Alert>}
+      {error && <Alert variant="danger" dismissible onClose={() => setError('')}>{error}</Alert>}
+      {success && <Alert variant="success" dismissible onClose={() => setSuccess('')}>{success}</Alert>}
 
-      {/* Blood Type Summary Cards */}
+      {/* ABO Type Summary Cards */}
       <Row className="mb-4">
         <Col>
           <Card>
             <Card.Body>
-              <Card.Title>Blood Type Summary</Card.Title>
+              <Card.Title>Blood Inventory Summary by ABO Type</Card.Title>
               <Row>
-                {['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'].map(bloodType => 
-                  getBloodTypeCard(bloodType)
+                {['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-', 'pending'].map(aboType => 
+                  getABOSummaryCard(aboType)
                 )}
               </Row>
             </Card.Body>
@@ -414,41 +433,58 @@ const Inventory = () => {
         <Col>
           <Card>
             <Card.Body>
-              <Card.Title>Detailed Inventory</Card.Title>
+              <Card.Title>Blood Inventory Details</Card.Title>
               {!inventory || inventory.length === 0 ? (
                 <Alert variant="info">
-                  No inventory data available. Start by adding blood units to the system.
+                  No blood units in inventory. Start by adding blood units to the system.
                 </Alert>
               ) : (
-                <table className="table table-striped table-bordered table-hover">
-                  <thead>
-                    <tr>
-                      <th>Blood Type</th>
-                      <th>Status</th>
-                      <th>Units</th>
-                      <th>Total Volume (ml)</th>
-                      <th>Last Updated</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {inventory.map((item, index) => (
-                      <tr key={index}>
-                        <td>
-                          <strong>{item.blood_type}</strong>
-                        </td>
-                        <td>{getStatusBadge(item.status)}</td>
-                        <td>{item.units || 0}</td>
-                        <td>{item.total_ml || 0}</td>
-                        <td>
-                          {item.last_updated ? 
-                            new Date(item.last_updated).toLocaleDateString() : 
-                            'N/A'
-                          }
-                        </td>
+                <div className="table-responsive">
+                  <Table striped bordered hover>
+                    <thead>
+                      <tr>
+                        <th>Unit ID</th>
+                        <th>Donor</th>
+                        <th>ABO Type</th>
+                        <th>Status</th>
+                        <th>Quantity (ml)</th>
+                        <th>Collection Date</th>
+                        <th>Expiry Date</th>
+                        <th>Storage Location</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {inventory.map((item, index) => (
+                        <tr key={index}>
+                          <td>
+                            <Badge bg="dark">{item.unit_id || 'N/A'}</Badge>
+                          </td>
+                          <td>
+                            {item.donor_first_name && item.donor_last_name ? 
+                              `${item.donor_first_name} ${item.donor_last_name}` : 
+                              'Unknown Donor'
+                            }
+                            {item.donor_number && (
+                              <div><small className="text-muted">ID: {item.donor_number}</small></div>
+                            )}
+                          </td>
+                          <td>{getABOBadge(item.abo_test_result)}</td>
+                          <td>{getStatusBadge(item.status)}</td>
+                          <td>{item.quantity_ml || 0} ml</td>
+                          <td>{formatDate(item.collection_date)}</td>
+                          <td>
+                            <span className={
+                              item.expiry_date && new Date(item.expiry_date) < new Date() ? 'text-danger fw-bold' : ''
+                            }>
+                              {formatDate(item.expiry_date)}
+                            </span>
+                          </td>
+                          <td>{item.storage_location || 'Main Storage'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </Table>
+                </div>
               )}
             </Card.Body>
           </Card>
@@ -463,18 +499,22 @@ const Inventory = () => {
               <Card.Body>
                 <Card.Title>Quick Actions</Card.Title>
                 <div className="d-grid gap-2 d-md-flex">
-                  <button 
-                    className="btn btn-primary me-md-2" 
+                  <Button 
+                    variant="primary" 
+                    className="me-md-2" 
                     onClick={handleShowAddModal}
                   >
+                    <i className="fas fa-plus me-2"></i>
                     Add Blood Unit
-                  </button>
-                  <button className="btn btn-success me-md-2" disabled>
-                    Update Inventory
-                  </button>
-                  <button className="btn btn-info" disabled>
+                  </Button>
+                  <Button variant="success" className="me-md-2" onClick={fetchInventory}>
+                    <i className="fas fa-sync me-2"></i>
+                    Refresh Inventory
+                  </Button>
+                  <Button variant="info" disabled>
+                    <i className="fas fa-chart-bar me-2"></i>
                     Generate Report
-                  </button>
+                  </Button>
                 </div>
               </Card.Body>
             </Card>
@@ -489,13 +529,20 @@ const Inventory = () => {
             <Card.Body>
               <Card.Title>Inventory Statistics</Card.Title>
               <ul className="list-unstyled">
-                <li>Total Blood Types: {new Set(inventory.map(item => item.blood_type)).size}</li>
-                <li>Total Units: {inventory.reduce((sum, item) => sum + (item.units || 0), 0)}</li>
-                <li>Total Volume: {inventory.reduce((sum, item) => sum + (item.total_ml || 0), 0)} ml</li>
+                <li>Total Units: {Array.isArray(inventory) ? inventory.length : 0}</li>
+                <li>Total Volume: {Array.isArray(inventory) ? inventory.reduce((sum, item) => sum + (Number(item.quantity_ml) || 0), 0) : 0} ml</li>
                 <li>Available Units: {
-                  inventory
-                    .filter(item => item.status === 'available' || item.status === 'approved')
-                    .reduce((sum, item) => sum + (item.units || 0), 0)
+                  Array.isArray(inventory) ? inventory.filter(item => 
+                    item.status === 'available' || item.status === 'approved'
+                  ).length : 0
+                }</li>
+                <li>Units in Testing: {
+                  Array.isArray(inventory) ? inventory.filter(item => item.status === 'in_testing').length : 0
+                }</li>
+                <li>Expired Units: {
+                  Array.isArray(inventory) ? inventory.filter(item => 
+                    item.expiry_date && new Date(item.expiry_date) < new Date()
+                  ).length : 0
                 }</li>
               </ul>
             </Card.Body>
@@ -506,14 +553,14 @@ const Inventory = () => {
             <Card.Body>
               <Card.Title>Status Distribution</Card.Title>
               <ul className="list-unstyled">
-                {Object.entries(
+                {Array.isArray(inventory) && Object.entries(
                   inventory.reduce((acc, item) => {
                     acc[item.status] = (acc[item.status] || 0) + 1;
                     return acc;
                   }, {})
                 ).map(([status, count]) => (
-                  <li key={status}>
-                    {getStatusBadge(status)}: {count} entries
+                  <li key={status} className="mb-1">
+                    {getStatusBadge(status)}: {count} units
                   </li>
                 ))}
               </ul>
@@ -522,7 +569,7 @@ const Inventory = () => {
         </Col>
       </Row>
 
-      {/* Add New Entry Modal */}
+      {/* Add New Blood Unit Modal */}
       <Modal show={showAddModal} onHide={handleCloseAddModal} size="lg">
         <Modal.Header closeButton>
           <Modal.Title>Add New Blood Unit</Modal.Title>
@@ -530,99 +577,132 @@ const Inventory = () => {
         <Form onSubmit={handleSubmit}>
           <Modal.Body>
             <Row>
-              <Col md={6}>
+              <Col md={12}>
                 <Form.Group className="mb-3">
                   <Form.Label>Donor *</Form.Label>
-                  <div className="position-relative">
-                    <InputGroup>
-                      <InputGroup.Text>
-                        <i className="fas fa-search"></i>
-                      </InputGroup.Text>
-                      <Form.Control
-                        type="text"
-                        placeholder="Search and select donor by ID, name, blood type..."
-                        value={searchTerm}
-                        onChange={handleSearchChange}
-                        onFocus={() => setShowDonorList(true)}
-                        disabled={donorsLoading}
-                        required
-                      />
-                    </InputGroup>
-                    
-                    {/* Donor dropdown list */}
-                    {showDonorList && searchTerm && (
-                      <div 
-                        className="position-absolute w-100 border bg-white shadow-sm"
-                        style={{
-                          zIndex: 1050,
-                          maxHeight: '200px',
-                          overflowY: 'auto',
-                          top: '100%',
-                          left: 0
-                        }}
-                      >
-                        <ListGroup variant="flush">
-                          {donorsLoading ? (
-                            <ListGroup.Item className="text-center">
-                              <Spinner animation="border" size="sm" className="me-2" />
-                              Loading donors...
-                            </ListGroup.Item>
-                          ) : filteredDonors.length === 0 ? (
-                            <ListGroup.Item className="text-muted text-center">
-                              No donors found matching "{searchTerm}"
-                            </ListGroup.Item>
-                          ) : (
-                            filteredDonors.map(donor => (
-                              <ListGroup.Item 
-                                key={donor.id || donor.donor_id || donor._id}
-                                action
-                                onClick={() => handleDonorSelect(donor)}
-                                className="py-2"
-                                style={{ cursor: 'pointer' }}
-                              >
-                                <div>
-                                  <strong>{getDonorDisplayName(donor)}</strong>
-                                  {donor.email && (
-                                    <div className="small text-muted">Email: {donor.email}</div>
-                                  )}
-                                  {donor.phone && (
-                                    <div className="small text-muted">Phone: {donor.phone}</div>
-                                  )}
-                                </div>
-                              </ListGroup.Item>
-                            ))
-                          )}
-                        </ListGroup>
-                      </div>
-                    )}
+                  
+                  {/* Manual input toggle for debugging */}
+                  <div className="mb-2">
+                    <Form.Check
+                      type="switch"
+                      id="manual-input-switch"
+                      label="Enter donor ID manually (troubleshooting)"
+                      checked={useManualInput}
+                      onChange={(e) => setUseManualInput(e.target.checked)}
+                    />
                   </div>
+
+                  {useManualInput ? (
+                    // Manual donor ID input
+                    <Form.Control
+                      type="text"
+                      placeholder="Enter donor ID directly (e.g., 1, 2, 3...)"
+                      value={formData.donor_id}
+                      onChange={(e) => setFormData(prev => ({
+                        ...prev,
+                        donor_id: e.target.value
+                      }))}
+                      required
+                    />
+                  ) : (
+                    // Donor search
+                    <div className="position-relative">
+                      <InputGroup>
+                        <InputGroup.Text>
+                          <i className="fas fa-search"></i>
+                        </InputGroup.Text>
+                        <Form.Control
+                          type="text"
+                          placeholder="Search by full name, phone number, or donor ID..."
+                          value={searchTerm}
+                          onChange={handleSearchChange}
+                          onFocus={() => {
+                            if (searchTerm.length >= 2) {
+                              setShowDonorList(true);
+                            }
+                          }}
+                          disabled={donorsLoading}
+                          required
+                        />
+                        <Button 
+                          variant="outline-secondary" 
+                          onClick={fetchDonors}
+                          disabled={donorsLoading}
+                          title="Refresh donor list"
+                        >
+                          {donorsLoading ? (
+                            <Spinner animation="border" size="sm" />
+                          ) : (
+                            <i className="fas fa-sync"></i>
+                          )}
+                        </Button>
+                      </InputGroup>
+                      
+                      {/* Selected donor info */}
+                      {selectedDonor && (
+                        <div className="mt-2 p-2 bg-light rounded">
+                          <small>
+                            <strong>Selected Donor:</strong> {getDonorDisplayName(selectedDonor)}
+                            {selectedDonor.email && ` • Email: ${selectedDonor.email}`}
+                            {selectedDonor.blood_type && ` • Blood Type: ${selectedDonor.blood_type}`}
+                            <br />
+                            <strong>Donor ID for form:</strong> {formData.donor_id}
+                          </small>
+                        </div>
+                      )}
+                      
+                      {/* Donor dropdown list */}
+                      {showDonorList && searchTerm.length >= 2 && (
+                        <div 
+                          className="position-absolute w-100 border bg-white shadow-sm mt-1"
+                          style={{
+                            zIndex: 1050,
+                            maxHeight: '200px',
+                            overflowY: 'auto'
+                          }}
+                        >
+                          <ListGroup variant="flush">
+                            {donorsLoading ? (
+                              <ListGroup.Item className="text-center">
+                                <Spinner animation="border" size="sm" className="me-2" />
+                                Loading donors...
+                              </ListGroup.Item>
+                            ) : filteredDonors.length === 0 ? (
+                              <ListGroup.Item className="text-muted text-center">
+                                No donors found matching "{searchTerm}"
+                                <br />
+                                <small>Total donors available: {donors.length}</small>
+                              </ListGroup.Item>
+                            ) : (
+                              filteredDonors.slice(0, 10).map(donor => (
+                                <ListGroup.Item 
+                                  key={donor.id || donor.donor_id}
+                                  action
+                                  onClick={() => handleDonorSelect(donor)}
+                                  className="py-2"
+                                  style={{ cursor: 'pointer' }}
+                                >
+                                  <div>
+                                    <strong>{getDonorDisplayName(donor)}</strong>
+                                    <div className="small text-muted">
+                                      {getDonorFullName(donor)} • Phone: {getDonorPhone(donor)}
+                                      {donor.email && ` • Email: ${donor.email}`}
+                                      {donor.blood_type && ` • Blood Type: ${donor.blood_type}`}
+                                    </div>
+                                  </div>
+                                </ListGroup.Item>
+                              ))
+                            )}
+                          </ListGroup>
+                        </div>
+                      )}
+                    </div>
+                  )}
                   <Form.Text className="text-muted">
-                    {selectedDonor && `Selected: ${getDonorDisplayName(selectedDonor)}`}
-                    {!selectedDonor && 'Type to search for donors - blood type will auto-fill when selected'}
-                  </Form.Text>
-                </Form.Group>
-              </Col>
-              <Col md={6}>
-                <Form.Group className="mb-3">
-                  <Form.Label>Blood Type *</Form.Label>
-                  <Form.Select 
-                    name="blood_type"
-                    value={formData.blood_type}
-                    onChange={handleInputChange}
-                    required
-                  >
-                    <option value="">Select Blood Type</option>
-                    <option value="A+">A+</option>
-                    <option value="A-">A-</option>
-                    <option value="B+">B+</option>
-                    <option value="B-">B-</option>
-                    <option value="AB+">AB+</option>
-                    <option value="AB-">AB-</option>
-                    <option value="O+">O+</option>
-                    <option value="O-">O-</option>
-                  </Form.Select>
-                  <Form.Text className="text-muted">
-                    {formData.blood_type ? `Blood type: ${formData.blood_type}` : 'This will auto-fill when you select a donor'}
+                    {useManualInput 
+                      ? 'Enter the donor ID directly' 
+                      : `Type at least 2 characters to search. ${donors.length} donors loaded.`
+                    }
                   </Form.Text>
                 </Form.Group>
               </Col>
@@ -638,46 +718,29 @@ const Inventory = () => {
                     onChange={handleInputChange}
                     required
                   >
-                    <option value="available">Available</option>
+                    <option value="collected">Collected</option>
                     <option value="in_testing">In Testing</option>
-                    <option value="approved">Approved</option>
-                    <option value="rejected">Rejected</option>
+                    <option value="available">Available</option>
                     <option value="quarantined">Quarantined</option>
                   </Form.Select>
                 </Form.Group>
               </Col>
               <Col md={6}>
                 <Form.Group className="mb-3">
-                  <Form.Label>Units *</Form.Label>
+                  <Form.Label>Quantity (ml) *</Form.Label>
                   <Form.Control
                     type="number"
-                    name="units"
-                    value={formData.units}
+                    name="quantity_ml"
+                    value={formData.quantity_ml}
                     onChange={handleInputChange}
-                    min="1"
-                    max="10"
+                    min="350"
+                    max="500"
+                    step="50"
                     required
                   />
                   <Form.Text className="text-muted">
-                    Number of blood units (1 unit = 450ml)
+                    Standard blood unit: 450ml
                   </Form.Text>
-                </Form.Group>
-              </Col>
-            </Row>
-
-            <Row>
-              <Col md={6}>
-                <Form.Group className="mb-3">
-                  <Form.Label>Total Volume (ml)</Form.Label>
-                  <Form.Control
-                    type="number"
-                    name="total_ml"
-                    value={formData.total_ml}
-                    onChange={handleInputChange}
-                    required
-                    readOnly
-                    className="bg-light"
-                  />
                 </Form.Group>
               </Col>
             </Row>
@@ -697,13 +760,31 @@ const Inventory = () => {
               </Col>
               <Col md={6}>
                 <Form.Group className="mb-3">
-                  <Form.Label>Expiration Date *</Form.Label>
+                  <Form.Label>Expiry Date *</Form.Label>
                   <Form.Control
                     type="date"
-                    name="expiration_date"
-                    value={formData.expiration_date}
+                    name="expiry_date"
+                    value={formData.expiry_date}
                     onChange={handleInputChange}
                     required
+                  />
+                  <Form.Text className="text-muted">
+                    Blood units expire 42 days after collection
+                  </Form.Text>
+                </Form.Group>
+              </Col>
+            </Row>
+
+            <Row>
+              <Col md={6}>
+                <Form.Group className="mb-3">
+                  <Form.Label>Storage Location</Form.Label>
+                  <Form.Control
+                    type="text"
+                    name="storage_location"
+                    value={formData.storage_location}
+                    onChange={handleInputChange}
+                    placeholder="Main Storage"
                   />
                 </Form.Group>
               </Col>
@@ -717,7 +798,7 @@ const Inventory = () => {
                 name="notes"
                 value={formData.notes}
                 onChange={handleInputChange}
-                placeholder="Additional notes or comments"
+                placeholder="Additional notes or comments about this blood unit..."
               />
             </Form.Group>
           </Modal.Body>
@@ -728,15 +809,18 @@ const Inventory = () => {
             <Button 
               variant="primary" 
               type="submit" 
-              disabled={submitting || !formData.donor_id || !formData.blood_type}
+              disabled={submitting || !formData.donor_id}
             >
               {submitting ? (
                 <>
                   <Spinner animation="border" size="sm" className="me-2" />
-                  Adding...
+                  Adding Blood Unit...
                 </>
               ) : (
-                'Add Blood Unit'
+                <>
+                  <i className="fas fa-save me-2"></i>
+                  Add Blood Unit
+                </>
               )}
             </Button>
           </Modal.Footer>

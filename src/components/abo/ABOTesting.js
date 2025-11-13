@@ -228,7 +228,6 @@ const ABOTesting = () => {
                       <th>#</th>
                       <th>Unit ID</th>
                       <th>Donor</th>
-                      <th>Blood Type</th>
                       <th>Collection Date</th>
                       <th>Expiry Date</th>
                       <th>Status</th>
@@ -252,9 +251,7 @@ const ABOTesting = () => {
                             <small className="text-muted">ID: {unit.donor_number}</small>
                           </div>
                         </td>
-                        <td>
-                          {getBloodTypeBadge(unit.blood_type)}
-                        </td>
+                       
                         <td>{new Date(unit.collection_date).toLocaleDateString()}</td>
                         <td>{new Date(unit.expiry_date).toLocaleDateString()}</td>
                         <td>{getStatusBadge(unit.status)}</td>

@@ -48,26 +48,62 @@ export const usersAPI = {
   getRoles: () => api.get('/users/roles'),
 };
 
+// services/api.js
 export const donorsAPI = {
-  getDonors: () => api.get('/donors'),
-  createDonor: (donorData) => api.post('/donors', donorData),
-  searchDonors: (query) => api.get(`/donors/search?q=${query}`),
-};
-
-export const inventoryAPI = {
-  getInventory: () => api.get('/inventory'),
-  getAvailableUnits: (bloodType) => 
-    api.get(`/inventory/units${bloodType ? `?blood_type=${bloodType}` : ''}`),
-  addInventoryItem: (data) => {
-    return api.post('/inventory', data);
+  // Get donors with pagination
+  getDonors: (page = 1, perPage = 100, search = '') => {
+    const params = { page, per_page: perPage };
+    if (search) params.search = search;
+    return api.get('/donors', { params });
   },
-  getDonors: () => {
-    return api.get('/donors');
-  }
   
-  // getActiveDonors: () => {
-  //   return api.get('/donors/active'); // if you have a specific endpoint
-  // }
+  // Get all donors without pagination (simple version)
+  getAllDonors: () => api.get('/donors/all'),
+  
+  createDonor: (donorData) => api.post('/donors', donorData),
+  
+  searchDonors: (query, page = 1, perPage = 20) => {
+    const params = { q: query, page, per_page: perPage };
+    return api.get('/donors/search', { params });
+  },
+  
+  getDonorById: (id) => api.get(`/donors/${id}`),
+  
+  updateDonor: (id, donorData) => api.put(`/donors/${id}`, donorData),
+  
+  getDonorByDonorId: (donorIdString) => api.get(`/donors/${donorIdString}`),
+  
+  // Debug endpoint
+  debugDonors: () => api.get('/donors/debug')
+};
+// services/api.js
+export const inventoryAPI = {
+  // Get all inventory items
+  getInventory: () => api.get('/inventory'),
+  
+  // Get inventory summary by ABO type and status
+  getInventorySummary: () => api.get('/inventory/summary'),
+  
+  // Add new blood unit
+  addBloodUnit: (bloodData) => api.post('/inventory', bloodData),
+  
+  // Get available units
+  getAvailableUnits: () => api.get('/inventory/available'),
+  
+  // Get expiring units
+  getExpiringUnits: (days = 7) => api.get(`/inventory/expiring?days=${days}`),
+  
+  // Get specific unit
+  getUnitById: (unitId) => api.get(`/inventory/${unitId}`),
+  
+  // Update test results
+  updateTestResults: (unitId, testData) => api.put(`/inventory/${unitId}/test`, testData),
+  
+  // Update unit status
+  updateUnitStatus: (unitId, status) => api.put(`/inventory/${unitId}/status`, { status }),
+  
+  // Get inventory statistics
+  getInventoryStats: () => api.get('/inventory/stats')
 };
 
 export const testingAPI = {
